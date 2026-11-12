@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>마크 검사기 · 일루스 MARC 오류 점검</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f4f6f8; color: #222; }
+header { background: #03c75a; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; }
+header .sub { font-size: 13px; opacity: .9; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 20px; background: #fff; border-bottom: 1px solid #dde; align-items: center; }
+button { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 6px; border: 1px solid #ccd; background: #fff; cursor: pointer; }
+button:hover { background: #f0f3f6; }
+button.primary { background: #03c75a; border-color: #03c75a; color: #fff; font-weight: bold; }
+button.primary:hover { background: #02b351; }
+button.danger { color: #d32f2f; }
+.summary { margin-left: auto; font-size: 14px; }
+.summary b.err { color: #e53935; } .summary b.warn { color: #ef8a00; }
+main { display: grid; grid-template-columns: 1fr 1fr 360px; gap: 14px; padding: 14px 20px; }
+@media (max-width: 1200px) { main { grid-template-columns: 1fr 1fr; } #listPanel { grid-column: 1 / -1; } }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+.panel { background: #fff; border: 1px solid #dde; border-radius: 10px; display: flex; flex-direction: column; min-height: 0; }
+.panel h2 { font-size: 14px; margin: 0; padding: 10px 14px; border-bottom: 1px solid #eef; background: #fafbfc; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 8px; }
+.panel h2 small { font-weight: normal; color: #888; }
+textarea { flex: 1; min-height: 520px; border: 0; resize: vertical; padding: 12px 14px; font-family: "D2Coding", "Consolas", "Nanum Gothic Coding", monospace; font-size: 14px; line-height: 1.75; outline: none; white-space: pre; overflow: auto; border-radius: 0 0 10px 10px; }
+#view { flex: 1; min-height: 520px; overflow: auto; padding: 8px 0; font-family: "D2Coding", "Consolas", "Nanum Gothic Coding", monospace; font-size: 14px; line-height: 1.75; }
+.row { display: flex; padding: 0 14px; white-space: pre-wrap; word-break: break-all; }
+.row:hover { background: #f7f9fb; }
+.row .ln { color: #aab; width: 28px; flex: none; user-select: none; text-align: right; margin-right: 10px; }
+.row .tag { color: #1565c0; font-weight: bold; }
+.row .dl { color: #7b1fa2; font-weight: bold; }
+.row.bad-line { background: #fff4f4; }
+.hl { border-radius: 3px; cursor: pointer; }
+.hl.error { color: #e53935; background: #ffe5e5; text-decoration: underline wavy #e53935; text-underline-offset: 3px; }
+.hl.warn { color: #c25e00; background: #fff1d6; text-decoration: underline wavy #ef8a00; text-underline-offset: 3px; }
+.hl.focus { outline: 2px solid #1e88e5; }
+.hl sup { font-size: 10px; color: #fff; background: currentColor; border-radius: 8px; padding: 0 4px; margin-left: 1px; text-decoration: none; display: inline-block; line-height: 14px; }
+.hl.error sup { background: #e53935; color: #fff; } .hl.warn sup { background: #ef8a00; color: #fff; }
+#list { overflow: auto; flex: 1; max-height: 760px; }
+.item { padding: 10px 14px; border-bottom: 1px solid #f0f0f4; cursor: pointer; }
+.item:hover, .item.focus { background: #f3f8ff; }
+.item .head { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; color: #fff; }
+.badge.error { background: #e53935; } .badge.warn { background: #ef8a00; } .badge.info { background: #1e88e5; }
+.item .where { color: #888; }
+.item .msg { margin: 4px 0; font-size: 14px; line-height: 1.5; }
+.item .chg { font-family: monospace; font-size: 13px; background: #f7f7f9; padding: 4px 8px; border-radius: 5px; }
+.item .chg del { color: #e53935; } .item .chg ins { color: #03a14c; text-decoration: none; font-weight: bold; }
+.item button { margin-top: 6px; font-size: 12px; padding: 3px 10px; }
+.empty { padding: 30px; text-align: center; color: #03a14c; font-size: 15px; }
+.author { padding: 10px 14px; border-top: 1px solid #eef; font-size: 13px; background: #fbfcfd; border-radius: 0 0 10px 10px; }
+.author label { display: block; margin: 4px 0; }
+.author input[type=text] { width: 140px; padding: 3px 6px; font: inherit; }
+.author .mark { font-size: 20px; font-weight: bold; color: #1565c0; font-family: monospace; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 18px; border-radius: 20px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+.toast.show { opacity: .92; }
+.help { font-size: 12px; color: #777; padding: 0 20px 20px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📕 마크 검사기</h1>
+  <span class="sub">일루스 MARC 붙여넣기 → 틀린 곳 빨간 표시 → 고쳐서 다시 일루스에 붙여넣기 (KDC는 검사 제외)</span>
+</header>
+<div class="toolbar">
+  <button class="primary" id="btnFixAll">전체 고치기</button>
+  <button id="btnCopy">📋 복사 (일루스에 붙여넣기)</button>
+  <button id="btnUndo">↩ 되돌리기</button>
+  <button id="btnSample">예시 넣기</button>
+  <button class="danger" id="btnClear">지우기</button>
+  <span class="summary" id="summary"></span>
+</div>
+<main>
+  <section class="panel">
+    <h2>✏️ 원문 입력·수정 <small>일루스에서 복사한 마크를 붙여넣고 여기서 직접 고치세요</small></h2>
+    <textarea id="src" spellcheck="false" placeholder="여기에 일루스 마크를 붙여넣으세요.&#10;&#10;예)&#10;245 00 ▼a가만히 들어주었어 /▼d코리 도어펠드 글·그림 ;▼e신형건 옮김"></textarea>
+  </section>
+  <section class="panel">
+    <h2>🔍 검사 결과 <small>빨간색 = 오류, 주황색 = 확인 필요 · 클릭하면 이유가 보여요</small></h2>
+    <div id="view"></div>
+  </section>
+  <section class="panel" id="listPanel">
+    <h2>📝 고칠 곳 <small id="listCount"></small></h2>
+    <div id="list"></div>
+    <div class="author" id="authorBox"></div>
+  </section>
+</main>
+<div class="help">
+  · 식별기호는 ▼ / $ / ǂ 모두 인식하고, 지시기호 공백은 빈칸·_·# 모두 인식합니다. 고친 결과는 붙여넣은 원래 형식을 그대로 유지합니다.<br>
+  · 저자기호는 <b>리재철 한글순도표 제5표</b>(성 첫 글자 + 둘째 글자 자음·모음 번호 + 서명 첫 글자 초성) 기준입니다. 도서관에서 다른 표를 쓰면 저자기호 항목은 참고만 하세요.<br>
+  · 입력한 내용은 이 브라우저 안에서만 처리되고 어디에도 전송되지 않습니다.
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ===================== KORMARC 규칙 =====================
+  // 지시기호 허용값. ' ' = 공백. 문자열 첫 글자가 "고치기"에서 제안하는 기본값.
+  var IND = {
+    '020': [' 1', ' '], '022': [' 01', ' '], '041': ['01 ', ' 7'], '049': ['01 ', ' '],
+    '082': ['01 ', '04 '], '090': [' ', ' '],
+    '100': ['103', ' '], '110': ['102', ' '], '111': ['102', ' '], '130': ['0123456789', ' '],
+    '240': ['10', '0123456789'], '245': ['01', '0123456789'], '246': ['1023', ' 012345678'],
+    '250': [' ', ' '], '260': [' 23', ' '], '264': [' 23', '10234'], '300': [' ', ' '],
+    '440': [' ', '0123456789'], '490': ['01', ' '],
+    '500': [' ', ' '], '502': [' ', ' '], '504': [' ', ' '], '505': ['0128', ' 0'], '520': [' 01238', ' '],
+    '521': [' 012348', ' '], '586': [' 8', ' '],
+    '600': ['103', '012345678'], '610': ['102', '012345678'], '611': ['102', '012345678'],
+    '630': ['0123456789', '012345678'], '650': [' 012', '801234567'], '651': [' ', '801234567'],
+    '653': [' 012', ' 0123456'],
+    '700': ['103', ' 2'], '710': ['102', ' 2'], '711': ['102', ' 2'], '730': ['0123456789', ' 2'], '740': ['0123456789', ' 2'],
+    '800': ['103', ' '], '830': [' ', '0123456789'], '940': ['0123456789', ' '], '950': ['0 12', ' ']
+  };
+  var IND_NAME = { '0': '0', '1': '1', ' ': '공백(␣)' };
+
+  // 식별기호 앞에 와야 하는 구두점 (첫 식별기호 제외)
+  var PUNCT = {
+    '245': { b: [' :', ' =', ' ;'], d: [' /'], e: [' ;', ','], n: ['.'], p: ['.', ','], x: [' ='] },
+    '246': { b: [' :'], n: ['.'], p: ['.', ','] },
+    '250': { b: [' /'] },
+    '260': { a: [' ;'], b: [' :'], c: [','] },
+    '264': { a: [' ;'], b: [' :'], c: [','] },
+    '300': { b: [' :'], c: [' ;'], e: [' +'] },
+    '440': { v: [' ;'], n: ['.'], p: ['.', ','] },
+    '490': { v: [' ;'], x: [','] },
+    '830': { v: [' ;'], n: ['.'], p: ['.', ','] }
+  };
+  var TAG_NAME = {
+    '020': 'ISBN', '049': '소장사항', '090': '청구기호', '100': '저자(기본표목)', '245': '서명/저자사항',
+    '250': '판사항', '260': '발행사항', '264': '발행사항', '300': '형태사항', '490': '총서사항',
+    '650': '주제명', '653': '키워드', '700': '부출저자', '830': '총서부출', '950': '가격'
+  };
+  var NON_REPEAT = { 'LDR': 1, '001': 1, '003': 1, '005': 1, '008': 1, '245': 1, '250': 1, '090': 1 };
+  var NON_REPEAT_SUB = { '245': 'abdc', '100': 'a', '260': '', '264': '', '300': 'abc', '020': 'a' };
+  var REQUIRED_SUB = { '245': 'a', '020': 'a', '100': 'a', '700': 'a', '260': 'abc', '264': 'abc', '300': 'a', '650': 'a', '490': 'a', '830': 'a' };
+
+  // ===================== 리재철 한글순도표 제5표 =====================
+  var CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'.split('');
+  var CHO_NUM = { 'ㄱ': '1', 'ㄲ': '1', 'ㄴ': '19', 'ㄷ': '2', 'ㄸ': '2', 'ㄹ': '29', 'ㅁ': '3', 'ㅂ': '4', 'ㅃ': '4', 'ㅅ': '5', 'ㅆ': '5', 'ㅇ': '6', 'ㅈ': '7', 'ㅉ': '7', 'ㅊ': '8', 'ㅋ': '87', 'ㅌ': '88', 'ㅍ': '89', 'ㅎ': '9' };
+  // 중성 순서: ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ
+  var JUNG_NUM = '233344445555566666778'.split('');
+  var JUNG_NUM_CH = '222233334444455555556'.split(''); // 초성이 ㅊ일 때
+
+  function decompose(ch) {
+    var c = ch.charCodeAt(0) - 0xAC00;
+    if (c < 0 || c > 11171) return null;
+    return { cho: CHO[Math.floor(c / 588)], jung: Math.floor((c % 588) / 28) };
+  }
+  function cleanAuthor(raw, fromStatement) {
+    var s = (raw || '').replace(/\[.*?\]|\(.*?\)/g, ' ');
+    if (fromStatement) s = s.split(/[,;]/)[0];
+    s = s.replace(/[\/:;=+.]+$/g, '').trim();
+    var ROLE = /\s*(글[·\/ㆍ]?그림|글|그림|지음|지은이|저|著|공저|편저|편|엮음|엮은이|옮김|옮긴이|역|번역|감수|기획|원작|그림책|사진|외)\s*$/;
+    for (var i = 0; i < 4; i++) s = s.replace(ROLE, '').trim();
+    if (!fromStatement && s.indexOf(',') >= 0) return s.split(',')[0].trim(); // 100▼a "성, 이름"
+    if (/\s/.test(s)) { var t = s.split(/\s+/); return t[t.length - 1]; } // 외국인 "이름 성" → 성
+    return s;
+  }
+  function titleInitial(title) {
+    var t = (title || '').replace(/^[\s\[\]("'“‘《<〈「『]+/, '');
+    if (!t) return '';
+    var d = decompose(t[0]);
+    return d ? d.cho : t[0];
+  }
+  function authorMark(name, title, withTitle) {
+    if (!name) return { mark: '', note: '저자명이 없습니다' };
+    var first = name[0];
+    if (!decompose(first)) return { mark: '', note: '한글 저자명만 지원합니다 (영문은 커터-샌본표 사용)' };
+    var mark = first;
+    if (name.length > 1) {
+      var d = decompose(name[1]);
+      if (d) mark += CHO_NUM[d.cho] + (d.cho === 'ㅊ' ? JUNG_NUM_CH : JUNG_NUM)[d.jung];
+    }
+    if (withTitle) mark += titleInitial(title);
+    return { mark: mark, note: '' };
+  }
+
+  // ===================== 파서 =====================
+  var DELIMS = ['▼', '$', 'ǂ', '‡'];
+  function detectDelim(text) {
+    var best = '▼', n = 0;
+    DELIMS.forEach(function (d) { var c = text.split(d).length - 1; if (c > n) { n = c; best = d; } });
+    return best;
+  }
+  function isBlank(c) { return c === ' ' || c === '_' || c === '#' || c === undefined || c === ''; }
+  function normInd(c) { return isBlank(c) ? ' ' : c; }
+
+  function parse(text) {
+    var delim = detectDelim(text);
+    var blankChar = /\n\d{3}[ \t]+[0-9 ]?_|\n\d{3}[ \t]+_/.test('\n' + text) ? '_' : (/\n\d{3}[ \t]+[0-9 ]?#|\n\d{3}[ \t]+#/.test('\n' + text) ? '#' : ' ');
+    var lines = text.split('\n');
+    var fields = [];
+    lines.forEach(function (raw, li) {
+      var line = raw.replace(/\r$/, '');
+      if (!line.trim()) return;
+      var m = /^(\s*)(LDR|ldr|리더|\d{3})(.*)$/.exec(line);
+      if (!m) { fields.push({ line: li, text: line, bad: true }); return; }
+      var tag = m[2].toUpperCase() === 'LDR' || m[2] === '리더' ? 'LDR' : m[2];
+      var restOff = m[1].length + m[2].length;
+      var rest = m[3];
+      var term = '';
+      var tm = /(▲|\x1e)\s*$/.exec(rest);
+      if (tm) { term = tm[1]; rest = rest.slice(0, tm.index); }
+      var f = { line: li, text: line, tag: tag, restOff: restOff, rest: rest, term: term, subs: [], control: tag === 'LDR' || tag < '010' };
+      if (f.control) { fields.push(f); return; }
+      var di = rest.indexOf(delim);
+      f.noDelim = di < 0;
+      if (di < 0) di = rest.length;
+      var prefix = rest.slice(0, di);
+      f.prefixStart = restOff; f.prefixEnd = restOff + di;
+      // 지시기호
+      var i1 = ' ', i2 = ' ', p1 = -1, p2 = -1, extra = '';
+      if (prefix.indexOf('\t') >= 0) {
+        f.sep = '\t';
+        var parts = prefix.split('\t'), pos = restOff, vals = [];
+        parts.forEach(function (pt) { if (pt.length) vals.push({ s: pt, at: pos }); pos += pt.length + 1; });
+        if (vals.length === 1) { i1 = vals[0].s[0]; p1 = vals[0].at; if (vals[0].s.length > 1) { i2 = vals[0].s[1]; p2 = p1 + 1; } extra = vals[0].s.slice(2).trim(); }
+        else if (vals.length >= 2) { i1 = vals[0].s[0]; p1 = vals[0].at; i2 = vals[1].s[0]; p2 = vals[1].at; extra = (vals[0].s.slice(1) + vals[1].s.slice(1)).trim(); }
+      } else {
+        f.sep = ' ';
+        var p = prefix, off = restOff;
+        if (p[0] === ' ') { p = p.slice(1); off++; }
+        if (p.length >= 1) { i1 = p[0]; p1 = off; }
+        if (p.length >= 2) { i2 = p[1]; p2 = off + 1; }
+        extra = p.slice(2).trim();
+      }
+      f.ind = [normInd(i1), normInd(i2)]; f.indPos = [p1, p2]; f.indRaw = [i1, i2]; f.indExtra = extra;
+      // 식별기호
+      var k = rest.indexOf(delim);
+      while (k >= 0) {
+        var nk = rest.indexOf(delim, k + 1);
+        var end = nk < 0 ? rest.length : nk;
+        f.subs.push({ code: rest[k + 1] || '', start: restOff + k, dataStart: restOff + k + 2, end: restOff + end, data: rest.slice(k + 2, end) });
+        k = nk;
+      }
+      fields.push(f);
+    });
+    return { delim: delim, blank: blankChar, fields: fields, lines: lines };
+  }
+
+  // ===================== 검사 =====================
+  function isbnValid(s) {
+    if (/^\d{13}$/.test(s)) {
+      var sum = 0; for (var i = 0; i < 12; i++) sum += (+s[i]) * (i % 2 ? 3 : 1);
+      return (10 - sum % 10) % 10 === +s[12];
+    }
+    if (/^\d{9}[\dX]$/i.test(s)) {
+      var t = 0; for (var j = 0; j < 9; j++) t += (+s[j]) * (10 - j);
+      var c = (11 - t % 11) % 11; return (c === 10 ? 'X' : String(c)) === s[9].toUpperCase();
+    }
+    return false;
+  }
+  function showInd(c) { return IND_NAME[c] || c; }
+
+  function check(text, opts) {
+    var P = parse(text), D = P.delim, issues = [];
+    function add(f, start, end, level, msg, fix) {
+      issues.push({ line: f.line, start: start, end: Math.max(end, start + 1), level: level, msg: msg, fix: fix || null, tag: f.tag });
+    }
+    var dataFields = P.fields.filter(function (f) { return !f.bad && !f.control; });
+    var allSubs = []; dataFields.forEach(function (f) { allSubs = allSubs.concat(f.subs); });
+    var spaceStyle = allSubs.length && allSubs.filter(function (s) { return s.data[0] === ' '; }).length / allSubs.length > 0.6;
+
+    var seen = {}, has1xx = [];
+    P.fields.forEach(function (f) {
+      if (f.bad) { add(f, 0, f.text.length, 'warn', '태그(3자리 숫자)로 시작하지 않는 줄입니다. 앞줄에서 잘려 내려온 내용이면 앞줄 끝에 이어 붙이세요.'); return; }
+      seen[f.tag] = (seen[f.tag] || 0) + 1;
+      var tagS = f.restOff - f.tag.length, tagE = f.restOff;
+      if (NON_REPEAT[f.tag] && seen[f.tag] === 2) add(f, tagS, tagE, 'error', f.tag + ' 필드는 한 번만 쓸 수 있는데 중복되었습니다.');
+      if (/^1\d\d$/.test(f.tag)) { has1xx.push(f); if (has1xx.length === 2) add(f, tagS, tagE, 'error', '기본표목(1XX)은 레코드에 하나만 있어야 합니다. 나머지는 7XX 부출표목으로 옮기세요.'); }
+      if (f.control) return;
+      var name = TAG_NAME[f.tag] ? '(' + TAG_NAME[f.tag] + ')' : '';
+
+      if (f.noDelim) { add(f, tagS, f.text.length, 'error', f.tag + name + ' 에 식별기호(' + D + 'a 등)가 없습니다.'); return; }
+
+      // 지시기호
+      if (f.indExtra) add(f, f.prefixStart, f.prefixEnd, 'error', '지시기호는 2자리여야 합니다. 지시기호 자리에 "' + f.indExtra + '" 같은 불필요한 글자가 있습니다.');
+      var rule = IND[f.tag];
+      if (rule) {
+        [0, 1].forEach(function (n) {
+          var v = f.ind[n];
+          if (rule[n].indexOf(v) >= 0) return;
+          var sug = rule[n][0];
+          var allowed = rule[n].split('').map(showInd).join(', ');
+          var msg = f.tag + name + ' 제' + (n + 1) + '지시기호 "' + showInd(v) + '"는 쓸 수 없습니다. 허용값: ' + allowed + '.';
+          if (f.tag === '264' && n === 1) msg += ' (0 = 생산, 1 = 발행, 2 = 배포, 3 = 제작, 4 = 저작권 표시)';
+          if (f.tag === '245' && n === 0) msg += ' (0 = 서명부출 안 함, 1 = 서명부출 함)';
+          if (f.tag === '100' || f.tag === '700') msg += n === 0 ? ' (개인명은 보통 1 = 성 먼저)' : '';
+          var pos = f.indPos[n], fix;
+          var sugCh = sug === ' ' ? (P.blank) : sug;
+          if (pos >= 0) fix = { start: pos, end: pos + 1, text: sugCh, label: '"' + showInd(v) + '" → "' + showInd(sug) + '"' };
+          else {
+            var ni = f.ind.slice(); ni[n] = sug;
+            var a = ni.map(function (c) { return c === ' ' ? P.blank : c; });
+            fix = { start: f.prefixStart, end: f.prefixEnd, text: f.sep === '\t' ? '\t' + a[0] + a[1] + '\t' : ' ' + a[0] + a[1] + ' ', label: '지시기호 → "' + ni.map(showInd).join('') + '"' };
+          }
+          var hs = pos >= 0 ? pos : f.prefixStart, he = pos >= 0 ? pos + 1 : f.prefixEnd;
+          if (he <= hs) { hs = tagS; he = tagE; }
+          add(f, hs, he, 'error', msg, fix);
+        });
+      }
+
+      // 식별기호 공통
+      var codes = {};
+      f.subs.forEach(function (s, idx) {
+        codes[s.code] = (codes[s.code] || 0) + 1;
+        if (!/^[a-z0-9]$/.test(s.code)) add(f, s.start, s.start + 2, 'error', '식별기호 "' + D + s.code + '"가 잘못되었습니다. 식별기호 뒤에는 영문 소문자나 숫자 한 글자가 와야 합니다.');
+        if (!s.data.trim()) add(f, s.start, s.end, 'error', D + s.code + ' 에 내용이 없습니다.', f.subs.length === 1
+          ? { deleteLine: true, start: 0, end: f.text.length, text: '', label: '빈 필드 줄 삭제' }
+          : { start: s.start, end: s.end, text: '', label: '빈 ' + D + s.code + ' 삭제' });
+        else {
+          if (!spaceStyle && /^\s+/.test(s.data)) {
+            var ws = /^\s+/.exec(s.data)[0].length;
+            add(f, s.dataStart, s.dataStart + ws, 'warn', D + s.code + ' 바로 뒤에 공백이 있습니다. 식별기호 다음에는 띄우지 않습니다.', { start: s.dataStart, end: s.dataStart + ws, text: '', label: '공백 삭제' });
+          }
+          var dm = /\S( {2,})\S/.exec(s.data);
+          if (dm) { var at = s.dataStart + dm.index + 1; add(f, at, at + dm[1].length, 'warn', '공백이 두 칸 이상 연속으로 있습니다.', { start: at, end: at + dm[1].length, text: ' ', label: '공백 한 칸으로' }); }
+        }
+        if (NON_REPEAT_SUB[f.tag] && NON_REPEAT_SUB[f.tag].indexOf(s.code) >= 0 && codes[s.code] === 2)
+          add(f, s.start, s.start + 2, 'error', f.tag + ' 의 ' + D + s.code + ' 는 반복할 수 없습니다.');
+
+        // 구두점
+        var pr = PUNCT[f.tag];
+        if (pr && idx > 0 && pr[s.code]) {
+          var want = pr[s.code], prev = f.subs[idx - 1];
+          var prevRaw = f.text.slice(prev.dataStart, s.start);
+          var prevTrim = prevRaw.replace(/\s+$/, '');
+          var leadP = /^\s*[:;\/=+]\s*/.exec(s.data);
+          var okEnd = want.some(function (w) { return prevTrim.slice(-w.length) === w && prevTrim.slice(-w.length - 1, -w.length) !== ' '; });
+          if (!okEnd || leadP) {
+            var base = prevTrim.replace(/\s*[:;\/=+]$/, '');
+            if (want[0] === '.' || want[0] === ',') base = base.replace(/[.,]$/, '');
+            base = base.replace(/\s+$/, '');
+            var fixStart = prev.dataStart + base.length;
+            var fixEnd = s.dataStart + (leadP ? leadP[0].length : 0);
+            var newText = want[0] + D + s.code;
+            var shown = '"' + want.map(function (w) { return w.replace(' ', '␣'); }).join('" 또는 "') + '"';
+            var why = leadP ? '구두점이 식별기호 뒤에 붙어 있습니다. 구두점은 식별기호 앞(앞 식별기호 끝)에 와야 합니다.'
+              : (/\s[.,]$/.test(prevTrim) && want.some(function (w) { return w === prevTrim.slice(-1); })
+                ? '쉼표·마침표 앞에는 띄어 쓰지 않습니다.'
+                : prevTrim.slice(-1) && /[:;\/=+]/.test(prevTrim.slice(-1)) && want.some(function (w) { return w.trim() === prevTrim.slice(-1); })
+                ? '구두점 앞에 한 칸 띄어야 합니다 (␣는 공백).'
+                : D + s.code + ' 앞에는 ' + shown + ' 가 와야 합니다 (␣는 공백).');
+            add(f, Math.min(fixStart, s.start), s.start + 2 + (leadP ? leadP[0].length : 0), 'error', f.tag + name + ' ' + why,
+              { start: fixStart, end: fixEnd, text: newText, label: JSON.stringify(f.text.slice(fixStart, fixEnd)).slice(1, -1) + ' → ' + newText });
+          }
+        }
+      });
+      var req = REQUIRED_SUB[f.tag];
+      if (req) req.split('').forEach(function (c) {
+        if (!codes[c]) add(f, tagS, tagE, f.tag === '245' || f.tag === '020' ? 'error' : 'warn', f.tag + name + ' 에 ' + D + c + ' 가 없습니다.');
+      });
+
+      // 필드별
+      if (f.tag === '020') f.subs.forEach(function (s) {
+        if (s.code !== 'a' && s.code !== 'z') return;
+        var raw = s.data.trim().split(/\s|\(/)[0];
+        var digits = raw.replace(/-/g, '');
+        if (raw.indexOf('-') >= 0) {
+          var hs = s.dataStart + s.data.indexOf(raw);
+          add(f, hs, hs + raw.length, 'warn', 'ISBN에는 붙임표(-)를 넣지 않습니다.', { start: hs, end: hs + raw.length, text: digits, label: raw + ' → ' + digits });
+        }
+        if (s.code === 'a' && !isbnValid(digits)) {
+          var hs2 = s.dataStart + Math.max(0, s.data.indexOf(raw));
+          add(f, hs2, hs2 + Math.max(1, raw.length), 'error', 'ISBN "' + digits + '"이(가) 올바르지 않습니다 (13자리/10자리 또는 체크숫자 오류). 책 뒷면 바코드와 대조하세요.');
+        }
+      });
+      if (f.tag === '490' && f.ind[0] === '1' && !/\n830/.test('\n' + text.replace(/^\s+/gm, '')))
+        add(f, tagS, tagE, 'warn', '490 제1지시기호가 1(총서부출 함)인데 830 필드가 없습니다. 830을 추가하거나 지시기호를 0으로 바꾸세요.');
+    });
+
+    if (!seen['245'] && dataFields.length) issues.push({ line: dataFields[0].line, start: 0, end: 3, level: 'error', msg: '245(서명) 필드가 없습니다. 반드시 있어야 합니다.', fix: null, tag: '245' });
+
+    // 저자기호
+    var author = { name: '', title: '', from: '', mark: '', note: '', actual: null };
+    var f245 = P.fields.filter(function (f) { return f.tag === '245'; })[0];
+    var title = f245 ? (f245.subs.filter(function (s) { return s.code === 'a'; })[0] || {}).data || '' : '';
+    title = title.replace(/\s*[:\/;=.]\s*$/, '').trim();
+    var main = has1xx[0], mainA = main && main.subs.filter(function (s) { return s.code === 'a'; })[0];
+    if (opts.authorOverride) { author.name = opts.authorOverride; author.from = '직접 입력'; }
+    else if (mainA) { author.name = cleanAuthor(mainA.data, false); author.from = main.tag + ' ' + D + 'a'; }
+    else if (f245) {
+      var d = f245.subs.filter(function (s) { return s.code === 'd'; })[0];
+      if (d) { author.name = cleanAuthor(d.data, true); author.from = '245 ' + D + 'd 첫 저자 (100 없음)'; }
+    }
+    author.title = title;
+    var am = authorMark(author.name, title, opts.withTitle);
+    author.mark = am.mark; author.note = am.note;
+    var f090 = P.fields.filter(function (f) { return f.tag === '090'; })[0];
+    if (f090 && author.mark) {
+      var b = f090.subs.filter(function (s) { return s.code === 'b'; })[0];
+      if (!b) {
+        add(f090, f090.text.length - 1, f090.text.length, 'warn', '090(청구기호)에 저자기호(' + D + 'b)가 없습니다.',
+          { start: f090.restOff + f090.rest.length, end: f090.restOff + f090.rest.length, text: D + 'b' + author.mark, label: D + 'b' + author.mark + ' 추가' });
+      } else {
+        var tok = /^\s*([^\s=]+)/.exec(b.data);
+        author.actual = tok ? tok[1] : '';
+        if (!tok || tok[1].indexOf(author.mark) !== 0) {
+          var ts = b.dataStart + (tok ? tok[0].length - tok[1].length : 0), te = ts + (tok ? tok[1].length : 0);
+          add(f090, ts, te, 'warn', '저자기호가 계산값과 다릅니다. "' + author.name + '"' + (opts.withTitle ? ' + 서명 "' + title + '"' : '') + ' → 리재철 5표 기준 "' + author.mark + '". (도서관에서 다른 표를 쓰면 무시하세요)',
+            { start: ts, end: te, text: author.mark, label: (tok ? tok[1] : '') + ' → ' + author.mark });
+        }
+      }
+    }
+    var order = { error: 0, warn: 1, info: 2 };
+    issues.sort(function (a, b) { return a.line - b.line || a.start - b.start || order[a.level] - order[b.level]; });
+    return { P: P, issues: issues, author: author };
+  }
+
+  // ===================== UI =====================
+  var $ = function (id) { return document.getElementById(id); };
+  var src = $('src'), view = $('view'), list = $('list');
+  var opts = { withTitle: localStorage.getItem('mc_withTitle') !== '0', authorOverride: '' };
+  var history = [], last = null;
+
+  function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function renderLine(text, f, iss, delim) {
+    // 글자별로 강조 번호 매기기
+    var mark = new Array(text.length + 1).fill(-1);
+    iss.forEach(function (it) {
+      for (var i = it.start; i < Math.min(it.end, text.length + 1); i++) if (mark[i] < 0 || it.level === 'error') mark[i] = it.idx;
+    });
+    var out = '', i = 0, tagEnd = f && !f.bad ? f.restOff : 0, tagStart = f && !f.bad ? f.restOff - f.tag.length : 0;
+    while (i < Math.max(text.length, 1)) {
+      var cur = mark[i], j = i;
+      while (j < text.length && mark[j] === cur) j++;
+      if (j === i) j = i + 1;
+      var seg = text.slice(i, j), html = '';
+      for (var k = 0; k < seg.length; k++) {
+        var ch = seg[k], pos = i + k;
+        if (pos >= tagStart && pos < tagEnd) html += '<span class="tag">' + esc(ch) + '</span>';
+        else if (ch === delim && seg[k + 1] !== undefined) { html += '<span class="dl">' + esc(ch + seg[k + 1]) + '</span>'; k++; }
+        else if (ch === delim) html += '<span class="dl">' + esc(ch) + '</span>';
+        else html += ch === '\t' ? '    ' : esc(ch);
+      }
+      if (!seg.length && cur >= 0) html = '&nbsp;';
+      if (cur >= 0) {
+        var it = last.issues[cur];
+        html = '<span class="hl ' + it.level + '" data-i="' + cur + '" title="' + esc(it.msg) + '">' + (html || '&nbsp;') + '<sup>' + (cur + 1) + '</sup></span>';
+      }
+      out += html; i = j;
+    }
+    // 줄 끝(길이 밖) 강조
+    iss.forEach(function (it) { if (it.start >= text.length) out += '<span class="hl ' + it.level + '" data-i="' + it.idx + '" title="' + esc(it.msg) + '">&nbsp;<sup>' + (it.idx + 1) + '</sup></span>'; });
+    return out;
+  }
+
+  function run() {
+    var text = src.value;
+    last = check(text, opts);
+    last.issues.forEach(function (it, i) { it.idx = i; });
+    var byLine = {}, fByLine = {};
+    last.issues.forEach(function (it) { (byLine[it.line] = byLine[it.line] || []).push(it); });
+    last.P.fields.forEach(function (f) { fByLine[f.line] = f; });
+    var html = '';
+    last.P.lines.forEach(function (raw, li) {
+      var line = raw.replace(/\r$/, '');
+      if (!line.trim()) return;
+      var iss = byLine[li] || [];
+      html += '<div class="row' + (iss.some(function (x) { return x.level === 'error'; }) ? ' bad-line' : '') + '" data-line="' + li + '"><span class="ln">' + (li + 1) + '</span><span>' + renderLine(line, fByLine[li], iss, last.P.delim) + '</span></div>';
+    });
+    view.innerHTML = html || '<div class="empty" style="color:#999">왼쪽에 마크를 붙여넣으면 바로 검사합니다.</div>';
+
+    var ne = last.issues.filter(function (x) { return x.level === 'error'; }).length;
+    var nw = last.issues.length - ne;
+    $('summary').innerHTML = text.trim() ? '오류 <b class="err">' + ne + '</b>건 · 확인 필요 <b class="warn">' + nw + '</b>건' : '';
+    $('listCount').textContent = last.issues.length ? last.issues.length + '건' : '';
+    if (!text.trim()) list.innerHTML = '';
+    else if (!last.issues.length) list.innerHTML = '<div class="empty">✅ 틀린 곳이 없습니다!<br><small>복사 버튼을 눌러 일루스에 붙여넣으세요.</small></div>';
+    else list.innerHTML = last.issues.map(function (it, i) {
+      var lineText = last.P.lines[it.line].replace(/\r$/, '');
+      var orig = lineText.slice(it.start, it.end);
+      var vis = function (x) { return esc(x.replace(/ /g, '␣').replace(/\t/g, '⇥')); };
+      var chg = it.fix ? '<div class="chg"><del>' + (vis(lineText.slice(it.fix.start, it.fix.end)) || '(없음)') + '</del> → <ins>' + (vis(it.fix.text) || '(삭제)') + '</ins></div>' : '';
+      return '<div class="item" data-i="' + i + '"><div class="head"><span class="badge ' + it.level + '">' + (i + 1) + ' · ' + (it.level === 'error' ? '오류' : '확인') + '</span><span class="where">' + (it.line + 1) + '번째 줄 · ' + esc(it.tag || '') + '</span></div>' +
+        '<div class="msg">' + esc(it.msg) + '</div>' + chg + (it.fix ? '<button data-fix="' + i + '">이렇게 고치기</button>' : '') + '</div>';
+    }).join('');
+    renderAuthor();
+  }
+
+  function renderAuthor() {
+    var a = last.author;
+    $('authorBox').innerHTML = '<b>저자기호 계산</b> <small>(리재철 5표)</small>' +
+      '<label>기준 저자: <input type="text" id="authorIn" value="' + esc(opts.authorOverride || a.name || '') + '" placeholder="저자명"> <small style="color:#888">' + esc(a.from || '') + '</small></label>' +
+      '<label>서명: ' + esc(a.title || '-') + '</label>' +
+      '<label><input type="checkbox" id="withTitle"' + (opts.withTitle ? ' checked' : '') + '> 저작기호(서명 첫 글자 초성) 붙이기</label>' +
+      '<div>결과: <span class="mark">' + esc(a.mark || '-') + '</span>' + (a.actual != null ? ' <small>(090▼b 현재값: ' + esc(a.actual) + ')</small>' : '') +
+      (a.note ? '<div style="color:#c25e00">' + esc(a.note) + '</div>' : '') +
+      (a.mark ? ' <button id="copyMark">복사</button>' : '') + '</div>';
+    var inp = $('authorIn');
+    inp.addEventListener('change', function () { opts.authorOverride = inp.value.trim() === last.author.name && !opts.authorOverride ? '' : inp.value.trim(); run(); });
+    $('withTitle').addEventListener('change', function (e) { opts.withTitle = e.target.checked; localStorage.setItem('mc_withTitle', opts.withTitle ? '1' : '0'); run(); });
+    if ($('copyMark')) $('copyMark').addEventListener('click', function () { copy(last.author.mark); });
+  }
+
+  function applyFix(it) { return applyFixTo(src.value, it); }
+  function applyFixTo(text, it) {
+    var lines = text.split('\n');
+    var l = lines[it.line], cr = /\r$/.test(l) ? '\r' : '';
+    l = l.replace(/\r$/, '');
+    if (it.fix.deleteLine) lines.splice(it.line, 1);
+    else lines[it.line] = l.slice(0, it.fix.start) + it.fix.text + l.slice(it.fix.end) + cr;
+    return lines.join('\n');
+  }
+  function setText(t, keepHistory) {
+    if (keepHistory !== false) history.push(src.value);
+    if (history.length > 100) history.shift();
+    src.value = t; run();
+  }
+
+  list.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-fix]');
+    if (b) { setText(applyFix(last.issues[+b.dataset.fix])); toast('고쳤습니다'); return; }
+    var item = e.target.closest('.item');
+    if (item) focusIssue(+item.dataset.i, 'view');
+  });
+  view.addEventListener('click', function (e) {
+    var h = e.target.closest('.hl');
+    if (h) focusIssue(+h.dataset.i, 'list');
+  });
+  function focusIssue(i, scrollTo) {
+    document.querySelectorAll('.focus').forEach(function (x) { x.classList.remove('focus'); });
+    var h = view.querySelector('.hl[data-i="' + i + '"]'), item = list.querySelector('.item[data-i="' + i + '"]');
+    if (h) h.classList.add('focus'); if (item) item.classList.add('focus');
+    var t = scrollTo === 'view' ? h : item;
+    if (t) t.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // 원문 입력창에서도 해당 줄 선택
+    var it = last.issues[i], lines = src.value.split('\n'), off = 0;
+    for (var k = 0; k < it.line; k++) off += lines[k].length + 1;
+    src.setSelectionRange(off + it.start, off + Math.min(it.end, lines[it.line].length));
+  }
+
+  $('btnFixAll').addEventListener('click', function () {
+    var before = src.value, t = before, n = 0;
+    for (var guard = 0; guard < 300; guard++) {
+      var r = check(t, opts), it = r.issues.filter(function (x) { return x.fix; })[0];
+      if (!it) break;
+      var nt = applyFixTo(t, it);
+      if (nt === t) break;
+      t = nt; n++;
+    }
+    if (t !== before) { setText(t); toast(n + '곳을 고쳤습니다. 남은 항목은 직접 확인하세요.'); }
+    else toast('자동으로 고칠 수 있는 곳이 없습니다');
+  });
+  $('btnUndo').addEventListener('click', function () { if (history.length) setText(history.pop(), false); else toast('되돌릴 내용이 없습니다'); });
+  $('btnCopy').addEventListener('click', function () { copy(src.value); });
+  $('btnClear').addEventListener('click', function () { setText(''); opts.authorOverride = ''; src.focus(); });
+  $('btnSample').addEventListener('click', function () {
+    setText([
+      '020    ▼a978-89-01234-56-4 ▼g77810 :▼c\\13000',
+      '056    ▼a843▼25',
+      '090    ▼a843▼b도63ㄱ',
+      '100 1  ▼a도어펠드, 코리',
+      '245 10 ▼a가만히 들어주었어▼d코리 도어펠드 글·그림 ;▼e신형건 옮김',
+      '260    ▼a서울 :▼b북뱅크,▼c2019',
+      '264  0 ▼a서울 ▼b북뱅크 ,▼c2019',
+      '300    ▼a1책 :▼b천연색삽화 ;▼c22 cm',
+      '490 1  ▼a북뱅크 그림책 ;▼v12',
+      '650  8 ▼a그림책',
+      '700 1  ▼a신형건,▼e옮김',
+      '700 5  ▼a',
+      '950 0  ▼a\\13000'
+    ].join('\n'));
+  });
+  var timer;
+  src.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 200); });
+  src.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') { e.preventDefault(); var s = src.selectionStart; src.setRangeText('\t', s, src.selectionEnd, 'end'); run(); }
+  });
+
+  function copy(t) {
+    var done = function () { toast('복사했습니다. 일루스 마크 편집창에 붙여넣으세요'); };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, fallback); else fallback();
+    function fallback() { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
+  }
+  var tt;
+  function toast(m) { var el = $('toast'); el.textContent = m; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(function () { el.classList.remove('show'); }, 2200); }
+
+  window.__marc = { check: check, authorMark: authorMark, cleanAuthor: cleanAuthor };
+  run();
+})();
+</script>
+</body>
+</html>
